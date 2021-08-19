@@ -147,10 +147,8 @@ def plot_radar(radarFileName):
     plt.close(fig)
 
 if __name__ == "__main__":
-    guiApp = wx.App()
-    frame = wx.Frame(None, title="Radar Data Viewer")
-    frame.Show()
-    guiApp.MainLoop()
     radarDataDir = path.join(getcwd(), "radarData")
+    with mp.Pool(processes=12) as pool:
+        pool.map(plot_radar, sorted(listdir(radarDataDir)))
     
         
