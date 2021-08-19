@@ -93,8 +93,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, isPreviewRes, range=160):
-    range=30
+def plot_radar(radarFileName, isPreviewRes, range=160, plot_radial=None):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -123,6 +122,9 @@ def plot_radar(radarFileName, isPreviewRes, range=160):
         warnings.filterwarnings("ignore")
         ADRADMapDisplay.plot_range_rings([40, 80, 120, 160], col="gray", ls="dotted")
     ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray")
+    if plot_radial is not None:
+        ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
+    
     infoString = str()
     if "instrument_name" in radar.metadata.keys():
         infoString = radar.metadata["instrument_name"].decode()
@@ -160,6 +162,6 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(False)))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(False), repeat(25), repeat(None)))
     
         
