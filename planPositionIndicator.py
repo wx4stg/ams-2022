@@ -13,7 +13,7 @@ import numpy as np
 import warnings
 import multiprocessing as mp
 from matplotlib import image as mpimage
-import wx
+
 
 def plot_ppi_map_modified(
             rmd, field, sweep=0, mask_tuple=None,
@@ -93,7 +93,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, isPreviewRes, range=160, plot_radial=None, saveFileName=None):
+def plot_radar(radarFileName, isPreviewRes, plotRadius=160, plot_radial=None, saveFileName=None):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -116,11 +116,11 @@ def plot_radar(radarFileName, isPreviewRes, range=160, plot_radial=None, saveFil
     cmap.set_under("#00000000")
     cmap.set_over("black")
     ADRADMapDisplay = pyart.graph.RadarMapDisplay(radar)
-    plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*range*1000, height=2*range*1000)
+    plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     ADRADMapDisplay.set_aspect_ratio(1)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
-        ADRADMapDisplay.plot_range_rings([40, 80, 120, 160], col="gray", ls="dotted")
+        ADRADMapDisplay.plot_range_rings(range(0, plotRadius, 10), col="gray", ls="dotted")
     ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray")
     if plot_radial is not None:
         ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
