@@ -93,7 +93,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, isPreviewRes, range=160, plot_radial=None):
+def plot_radar(radarFileName, isPreviewRes, range=160, plot_radial=None, saveFileName=None):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -155,13 +155,16 @@ def plot_radar(radarFileName, isPreviewRes, range=160, plot_radial=None):
     if  isPreviewRes:
         return fig
     else:
-        fig.savefig(path.join(basePath, str(sorted(listdir(radarDataDir)).index(radarFileName))+".png"), bbox_inches="tight")
+        if saveFileName is not None:
+            fig.savefig(saveFileName, bbox_inches="tight")
+        else:
+            fig.savefig(path.join(basePath, str(sorted(listdir(radarDataDir)).index(radarFileName))+".png"), bbox_inches="tight")
         plt.close(fig)
 
 if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(False), repeat(25), repeat(None)))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(False), repeat(25), repeat(None), repeat(None)))
     
         

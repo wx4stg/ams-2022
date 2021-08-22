@@ -66,7 +66,7 @@ def plot_azimuth_to_rhi_modified(
             field=field, ax=ax, fig=fig, ticks=ticks, ticklabs=ticklabs)
     return pm
 
-def plot_crosssection(radarFileName, azimuth, isPreviewRes):
+def plot_crosssection(radarFileName, azimuth, isPreviewRes, saveFileName):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -120,7 +120,10 @@ def plot_crosssection(radarFileName, azimuth, isPreviewRes):
     if  isPreviewRes:
         return fig
     else:
-        fig.savefig("rhitest.png", bbox_inches="tight")
+        if saveFileName is not None:
+            fig.savefig(saveFileName, bbox_inches="tight")
+        else:
+            fig.savefig("rhitest.png", bbox_inches="tight")
         plt.close(fig)
 
 

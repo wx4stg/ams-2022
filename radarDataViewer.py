@@ -73,6 +73,9 @@ class radarDataViewerFrame(wx.Frame):
         redrawBtn = wx.Button(controlsPanel, label="Redraw", size=(100, 25))
         redrawBtn.Bind(EVT_BUTTON, self.onRedrawBtnPress)
         controlsPanelSizer.Add(redrawBtn, 1, wx.EXPAND | wx.ALL, 20)
+        exportBtn = wx.Button(controlsPanel, label="Export", size=(100, 25))
+        exportBtn.Bind(EVT_BUTTON, self.onExportBtnPress)
+        controlsPanelSizer.Add(exportBtn, 1, wx.EXPAND | wx.ALL, 20)
         controlsPanel.SetSizer(controlsPanelSizer)
         
         plotsAndControlsSizer = wx.BoxSizer(wx.VERTICAL)
@@ -90,13 +93,16 @@ class radarDataViewerFrame(wx.Frame):
     def onRedrawBtnPress(self, event):
         self.drawPPI()
         self.drawRHI()
+    def onExportBtnPress(self, event):
+        planPositionIndicator.plot_radar(self.requestedFile, False, 30, None, str("exports/ppi_"+self.requestedFile+".png"))
+        rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, False, str("exports/rhi_"+self.requestedFile+".png"))
     def drawPPI(self):
         if self.requestedFile is not None:
-            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, True, 30, plot_radial=self.requestedAz))
+            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, True, 30, self.requestedAz, None))
     def drawRHI(self):
         if self.requestedFile is not None:
             if self.requestedAz is not None:
-                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, True))
+                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, True, None))
     
 
 
