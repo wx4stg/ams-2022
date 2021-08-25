@@ -67,8 +67,16 @@ class radarDataViewerFrame(wx.Frame):
         availTimesDropDown = wx.Choice(controlsPanel, choices=sorted(listdir(radarDataDir)))
         availTimesDropDown.Bind(EVT_CHOICE, self.onTimeSel)
         controlsPanelSizer.Add(availTimesDropDown, 5, wx.EXPAND | wx.ALL, 20)
+        radiusText = wx.StaticText(controlsPanel, label="PPI map radius (km):", style=wx.ALIGN_CENTER_HORIZONTAL)
+        controlsPanelSizer.Add(radiusText, 1, wx.EXPAND | wx.ALL, 20)
+        radSlider = wx.Slider(controlsPanel, value=30, minValue=10, maxValue=160, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(360, 100))
+        self.requestedRad = 30
+        radSlider.Bind(EVT_SLIDER, self.onRadSliderScroll)
+        controlsPanelSizer.Add(radSlider, 10, wx.EXPAND | wx.ALL, 20)
+        azText = wx.StaticText(controlsPanel, label="Azimuth for RHI:", style=wx.ALIGN_CENTER_HORIZONTAL)
+        controlsPanelSizer.Add(azText, 1, wx.EXPAND | wx.ALL, 20)
         azSlider = wx.Slider(controlsPanel, value=0, minValue=0, maxValue=360, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(360, 100))
-        azSlider.Bind(EVT_SLIDER, self.onSliderScroll)
+        azSlider.Bind(EVT_SLIDER, self.onAzSliderScroll)
         controlsPanelSizer.Add(azSlider, 10, wx.EXPAND | wx.ALL, 20)
         redrawBtn = wx.Button(controlsPanel, label="Redraw", size=(100, 25))
         redrawBtn.Bind(EVT_BUTTON, self.onRedrawBtnPress)
@@ -88,8 +96,10 @@ class radarDataViewerFrame(wx.Frame):
         obj = event.GetEventObject()
         self.requestedFile = obj.GetString(obj.GetSelection())
         self.drawPPI()
-    def onSliderScroll(self, event):
+    def onAzSliderScroll(self, event):
         self.requestedAz = event.GetEventObject().GetValue()
+    def onRadSliderScroll(self, event):
+        self.requestedRad = event.GetEventObject().GetValue()
     def onRedrawBtnPress(self, event):
         self.drawPPI()
         self.drawRHI()
@@ -98,7 +108,7 @@ class radarDataViewerFrame(wx.Frame):
         rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, False, str("exports/rhi_"+self.requestedFile+".png"))
     def drawPPI(self):
         if self.requestedFile is not None:
-            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, True, 30, self.requestedAz, None))
+            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, True, self.requestedRad, self.requestedAz, None))
     def drawRHI(self):
         if self.requestedFile is not None:
             if self.requestedAz is not None:
