@@ -66,7 +66,7 @@ def plot_azimuth_to_rhi_modified(
             field=field, ax=ax, fig=fig, ticks=ticks, ticklabs=ticklabs)
     return pm
 
-def plot_crosssection(radarFileName, azimuth, isPreviewRes, saveFileName):
+def plot_crosssection(radarFileName, saveFileName=None, azimuth=0, isPreviewRes=False, plotRadius=160, rangeRingStep=10):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -91,20 +91,30 @@ def plot_crosssection(radarFileName, azimuth, isPreviewRes, saveFileName):
     plotHandle = plot_azimuth_to_rhi_modified(ADRADDisplay, "reflectivity", azimuth, norm=norm, cmap=cmap, colorbar_flag=False)
     infoString = str()
     if "instrument_name" in radar.metadata.keys():
-        infoString = radar.metadata["instrument_name"].decode()
+        insStr = radar.metadata["instrument_name"]
+        try:
+            insStr = insStr.decode()
+        except (UnicodeDecodeError, AttributeError, TypeError):
+            pass
+        infoString = insStr
     if "sigmet_task_name" in radar.metadata.keys():
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
-    infoString = infoString + "\nRange-Height Indicator\n"
+    elif "vcp_pattern" in radar.metadata.keys():
+        infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
+    infoString = infoString + " PPI\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"
-    infoString = infoString + "    Azimuth: " + str(azimuth) + "°"
+    elevation = np.round(radar.fixed_angle["data"][0], 1)
+    infoString = infoString + "    Elevation: " + str(elevation) + "°"
     if "unambiguous_range" in radar.instrument_parameters:
         maxRange = np.round(np.max(radar.instrument_parameters["unambiguous_range"]["data"])/1000, 0)
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
     infoString = infoString + pyart.util.datetime_from_radar(radar).strftime("%d %b %Y %H:%M:%S UTC")
-    ax.set_xlim([0, 60])
-    ax.set_ylim([0, 5])
+    print()
+    ax.set_xlim([0, plotRadius])
+    ax.set_xticks(range(0, plotRadius+1, rangeRingStep))
+    ax.set_ylim([0, (plotRadius*np.tan(np.deg2rad(max(radar.elevation["data"]))))])
     ax.set_title(infoString)
     cbax = fig.add_axes([ax.get_position().x0, 0.05, (ax.get_position().width/3), .02])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
@@ -125,7 +135,3 @@ def plot_crosssection(radarFileName, azimuth, isPreviewRes, saveFileName):
         else:
             fig.savefig("rhitest.png", bbox_inches="tight")
         plt.close(fig)
-
-
-if __name__ == "__main__":
-    plot_crosssection("TAMU_20210409_0205", 350, True)

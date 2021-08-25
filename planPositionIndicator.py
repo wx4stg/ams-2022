@@ -3,6 +3,7 @@
 # Created 7 July 2021 by Sam Gardner <stgardner4@tamu.edu>
 
 from datetime import datetime as dt
+from typing import Type
 import pyart
 from matplotlib import pyplot as plt
 from os import path, getcwd, listdir
@@ -93,7 +94,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, isPreviewRes, plotRadius=160, plot_radial=None, saveFileName=None):
+def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -120,16 +121,22 @@ def plot_radar(radarFileName, isPreviewRes, plotRadius=160, plot_radial=None, sa
     ADRADMapDisplay.set_aspect_ratio(1)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
-        ADRADMapDisplay.plot_range_rings(range(0, plotRadius, 10), col="gray", ls="dotted")
+        ADRADMapDisplay.plot_range_rings(range(0, plotRadius+1, rangeRingStep), col="gray", ls="dotted")
     ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray")
     if plot_radial is not None:
-        ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
-    
+        ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+5*np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+5*np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
     infoString = str()
     if "instrument_name" in radar.metadata.keys():
-        infoString = radar.metadata["instrument_name"].decode()
+        insStr = radar.metadata["instrument_name"]
+        try:
+            insStr = insStr.decode()
+        except (UnicodeDecodeError, AttributeError, TypeError):
+            pass
+        infoString = insStr
     if "sigmet_task_name" in radar.metadata.keys():
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
+    elif "vcp_pattern" in radar.metadata.keys():
+        infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
     infoString = infoString + " PPI\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
@@ -165,6 +172,5 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(False), repeat(25), repeat(None), repeat(None)))
-    
-        
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(160), repeat(40), repeat(None)))
+            

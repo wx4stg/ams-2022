@@ -69,13 +69,19 @@ class radarDataViewerFrame(wx.Frame):
         controlsPanelSizer.Add(availTimesDropDown, 5, wx.EXPAND | wx.ALL, 20)
         radiusText = wx.StaticText(controlsPanel, label="PPI map radius (km):", style=wx.ALIGN_CENTER_HORIZONTAL)
         controlsPanelSizer.Add(radiusText, 1, wx.EXPAND | wx.ALL, 20)
-        radSlider = wx.Slider(controlsPanel, value=30, minValue=10, maxValue=160, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(360, 100))
+        radSlider = wx.Slider(controlsPanel, value=30, minValue=10, maxValue=300, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(100, 100))
         self.requestedRad = 30
         radSlider.Bind(EVT_SLIDER, self.onRadSliderScroll)
         controlsPanelSizer.Add(radSlider, 10, wx.EXPAND | wx.ALL, 20)
+        rrText = wx.StaticText(controlsPanel, label="Range ring step (km):", style=wx.ALIGN_CENTER_HORIZONTAL)
+        controlsPanelSizer.Add(rrText, 1, wx.EXPAND | wx.ALL)
+        rrSlider = wx.Slider(controlsPanel, value=10, minValue=0, maxValue=300, style=wx.SL_HORIZONTAL | wx.SL_LABELS, size=(100, 100))
+        self.requestedRRStep = 10
+        rrSlider.Bind(EVT_SLIDER, self.onrrSliderScroll)
+        controlsPanelSizer.Add(rrSlider, 10, wx.EXPAND | wx.ALL, 20)
         azText = wx.StaticText(controlsPanel, label="Azimuth for RHI:", style=wx.ALIGN_CENTER_HORIZONTAL)
         controlsPanelSizer.Add(azText, 1, wx.EXPAND | wx.ALL, 20)
-        azSlider = wx.Slider(controlsPanel, value=0, minValue=0, maxValue=360, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(360, 100))
+        azSlider = wx.Slider(controlsPanel, value=0, minValue=0, maxValue=360, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(100, 100))
         azSlider.Bind(EVT_SLIDER, self.onAzSliderScroll)
         controlsPanelSizer.Add(azSlider, 10, wx.EXPAND | wx.ALL, 20)
         redrawBtn = wx.Button(controlsPanel, label="Redraw", size=(100, 25))
@@ -100,6 +106,8 @@ class radarDataViewerFrame(wx.Frame):
         self.requestedAz = event.GetEventObject().GetValue()
     def onRadSliderScroll(self, event):
         self.requestedRad = event.GetEventObject().GetValue()
+    def onrrSliderScroll(self, event):
+        self.requestedRRStep = event.GetEventObject().GetValue()
     def onRedrawBtnPress(self, event):
         self.drawPPI()
         self.drawRHI()
@@ -108,13 +116,11 @@ class radarDataViewerFrame(wx.Frame):
         rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, False, str("exports/rhi_"+self.requestedFile+".png"))
     def drawPPI(self):
         if self.requestedFile is not None:
-            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, True, self.requestedRad, self.requestedAz, None))
+            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, None, True, self.requestedRad, self.requestedRRStep, self.requestedAz))
     def drawRHI(self):
         if self.requestedFile is not None:
             if self.requestedAz is not None:
-                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, True, None))
-    
-
+                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, None, self.requestedAz, True, self.requestedRad, self.requestedRRStep))
 
 if __name__ == "__main__":
     app = wx.App()
