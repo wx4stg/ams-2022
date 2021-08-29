@@ -3,7 +3,7 @@
 # Created 7 July 2021 by Sam Gardner <stgardner4@tamu.edu>
 
 from datetime import datetime as dt
-from typing import Type
+from datetime import timedelta, timezone
 import pyart
 from matplotlib import pyplot as plt
 from os import path, getcwd, listdir
@@ -14,6 +14,7 @@ import numpy as np
 import warnings
 import multiprocessing as mp
 from matplotlib import image as mpimage
+import pandas as pd
 
 
 def plot_ppi_map_modified(
@@ -94,7 +95,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None):
+def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -125,6 +126,15 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray")
     if plot_radial is not None:
         ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+5*np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+5*np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
+    radarScanDT = pyart.util.datetime_from_radar(radar)
+    radarScanDT = dt(radarScanDT.year, radarScanDT.month, radarScanDT.day, radarScanDT.hour, radarScanDT.minute, radarScanDT.second, tzinfo=timezone.utc)
+    if plot_damage:
+        damageReports = pd.read_csv("damagereports.csv")
+        damageReports["datetimes"] = [dt.strptime(str(damageReports["BEGIN_DATE"][i])+" "+str(damageReports["BEGIN_TIME"][i]), "%m/%d/%y %H%M").replace(tzinfo=timezone.utc) + timedelta(hours=6) for i in range(0, len(damageReports))]
+        damageReports = damageReports.set_index(["datetimes"])
+        startSearch = radarScanDT - timedelta(hours=1)
+        damageReports = damageReports.loc[startSearch:radarScanDT]
+        ax.scatter(damageReports["BEGIN_LON"], damageReports["BEGIN_LAT"], s=10*damageReports["MAGNITUDE"], c="black")
     infoString = str()
     if "instrument_name" in radar.metadata.keys():
         insStr = radar.metadata["instrument_name"]
@@ -146,7 +156,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     if "unambiguous_range" in radar.instrument_parameters:
         maxRange = np.round(np.max(radar.instrument_parameters["unambiguous_range"]["data"])/1000, 0)
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
-    infoString = infoString + pyart.util.datetime_from_radar(radar).strftime("%d %b %Y %H:%M:%S UTC")
+    infoString = infoString + radarScanDT.strftime("%d %b %Y %H:%M:%S UTC")
     ax.set_title(infoString)
     cbax = fig.add_axes([ax.get_position().x0, 0.075, (ax.get_position().width/3), .02])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
@@ -172,4 +182,4 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None)))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False)))
