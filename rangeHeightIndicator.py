@@ -101,7 +101,7 @@ def plot_crosssection(radarFileName, saveFileName=None, azimuth=0, isPreviewRes=
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
     elif "vcp_pattern" in radar.metadata.keys():
         infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
-    infoString = infoString + " PPI\n"
+    infoString = infoString + " RHI\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"

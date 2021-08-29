@@ -1,6 +1,6 @@
 from os import listdir, getcwd, path
 import wx
-from wx.core import EVT_BUTTON, EVT_CHOICE, EVT_SLIDER
+from wx.core import EVT_BUTTON, EVT_CHECKBOX, EVT_CHOICE, EVT_SLIDER
 import planPositionIndicator
 import rangeHeightIndicator
 import matplotlib
@@ -64,9 +64,15 @@ class radarDataViewerFrame(wx.Frame):
         controlsPanelSizer = wx.BoxSizer(wx.HORIZONTAL)
         controlsPanel = wx.Panel(self, size=(788, 100))
         radarDataDir = path.join(getcwd(), "radarData") 
-        availTimesDropDown = wx.Choice(controlsPanel, choices=sorted(listdir(radarDataDir)))
+        availTimesDropDown = wx.Choice(controlsPanel, choices=sorted(listdir(radarDataDir)), style=wx.ALIGN_CENTER_VERTICAL)
         availTimesDropDown.Bind(EVT_CHOICE, self.onTimeSel)
-        controlsPanelSizer.Add(availTimesDropDown, 5, wx.EXPAND | wx.ALL, 20)
+        controlsPanelSizer.Add(availTimesDropDown, 1, wx.EXPAND | wx.ALL, 20)
+        shouldShowLtgBox = wx.CheckBox(controlsPanel, label="Show lightning?", style=wx.ALIGN_CENTER_VERTICAL)
+        shouldShowLtgBox.Bind(EVT_CHECKBOX, self.onSetShowLtg)
+        controlsPanelSizer.Add(shouldShowLtgBox, 1, wx.EXPAND | wx.ALL, 20)
+        shouldShowRptsBox = wx.CheckBox(controlsPanel, label="Show Hail Reports?", style=wx.ALIGN_CENTER_VERTICAL)
+        shouldShowRptsBox.Bind(EVT_CHECKBOX, self.onSetShowReports)
+        controlsPanelSizer.Add(shouldShowRptsBox, 1, wx.EXPAND | wx.ALL, 20)
         radiusText = wx.StaticText(controlsPanel, label="PPI map radius (km):", style=wx.ALIGN_CENTER_HORIZONTAL)
         controlsPanelSizer.Add(radiusText, 1, wx.EXPAND | wx.ALL, 20)
         radSlider = wx.Slider(controlsPanel, value=30, minValue=10, maxValue=300, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(100, 100))
@@ -102,6 +108,14 @@ class radarDataViewerFrame(wx.Frame):
         obj = event.GetEventObject()
         self.requestedFile = obj.GetString(obj.GetSelection())
         self.drawPPI()
+    def onSetShowLtg(self, event):
+        obj = event.GetEventObject()
+        self.shouldPlotLightning = obj.GetValue()
+        print("LIGHTNING: "+str(self.shouldPlotLightning))
+    def onSetShowReports(self, event):
+        obj = event.GetEventObject()
+        self.shouldPlotReports = obj.GetValue()
+        print("Reports: "+str(self.shouldPlotReports))
     def onAzSliderScroll(self, event):
         self.requestedAz = event.GetEventObject().GetValue()
     def onRadSliderScroll(self, event):
