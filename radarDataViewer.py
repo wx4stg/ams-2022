@@ -132,7 +132,7 @@ class radarDataViewerFrame(wx.Frame):
     def drawRHI(self):
         if self.requestedFile is not None:
             if self.requestedAz is not None:
-                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, None, self.requestedAz, True, self.requestedRad, self.requestedRRStep, self.shouldPlotLightning))
+                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, None, self.requestedAz, True, self.requestedRad, self.requestedRRStep))
 
 if __name__ == "__main__":
     app = wx.App()
