@@ -4,6 +4,7 @@
 
 from datetime import datetime as dt
 from datetime import timedelta, timezone
+from pandas.core.frame import DataFrame
 import pyart
 from matplotlib import pyplot as plt
 from os import path, getcwd, listdir
@@ -15,6 +16,7 @@ import warnings
 import multiprocessing as mp
 from matplotlib import image as mpimage
 import pandas as pd
+from pyxlma.lmalib.io import read as readlma
 
 
 def plot_ppi_map_modified(
@@ -95,7 +97,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False):
+def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False, plot_lightning=False):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -135,6 +137,22 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         startSearch = radarScanDT - timedelta(hours=1)
         damageReports = damageReports.loc[startSearch:radarScanDT]
         ax.scatter(damageReports["BEGIN_LON"], damageReports["BEGIN_LAT"], s=10*damageReports["MAGNITUDE"], c="black")
+    if plot_lightning:
+        inputDir = path.join(getcwd(), "sourceinput")
+        ltgSources = pd.DataFrame()
+        for ltgFile in sorted(listdir(inputDir)):
+            ltgSrc = readlma.lmafile(path.join(inputDir, ltgFile))
+            fileStartTime = ltgSrc.starttime
+            fileStartTime = dt(fileStartTime.year, fileStartTime.month, fileStartTime.day, fileStartTime.hour, (fileStartTime.minute - fileStartTime.minute%10), 0, tzinfo=timezone.utc)
+            if fileStartTime > radarScanDT - timedelta(minutes=10):
+                ltgData = ltgSrc.readfile()
+                if ltgData.empty:
+                    pass
+                else:
+                    ltgData["dtobjs"] = [dt(time.year, time.month, time.day, time.hour, time.minute, time.second, tzinfo=timezone.utc) for time in ltgData["Datetime"]]
+                    dataToPlot = ltgData.loc[ltgData.dtobjs <= radarScanDT]
+                    dataToPlot = dataToPlot.loc[dataToPlot.dtobjs >= radarScanDT - timedelta(minutes=2)]
+                    ax.scatter(dataToPlot["lon"], dataToPlot["lat"], s=0.01, c="#00000099", transform=ccrs.PlateCarree())
     infoString = str()
     if "instrument_name" in radar.metadata.keys():
         insStr = radar.metadata["instrument_name"]
@@ -182,4 +200,4 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False)))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(50), repeat(10), repeat(None), repeat(False), repeat(True)))

@@ -111,11 +111,9 @@ class radarDataViewerFrame(wx.Frame):
     def onSetShowLtg(self, event):
         obj = event.GetEventObject()
         self.shouldPlotLightning = obj.GetValue()
-        print("LIGHTNING: "+str(self.shouldPlotLightning))
     def onSetShowReports(self, event):
         obj = event.GetEventObject()
         self.shouldPlotReports = obj.GetValue()
-        print("Reports: "+str(self.shouldPlotReports))
     def onAzSliderScroll(self, event):
         self.requestedAz = event.GetEventObject().GetValue()
     def onRadSliderScroll(self, event):
@@ -130,11 +128,11 @@ class radarDataViewerFrame(wx.Frame):
         rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, False, str("exports/rhi_"+self.requestedFile+".png"))
     def drawPPI(self):
         if self.requestedFile is not None:
-            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, None, True, self.requestedRad, self.requestedRRStep, self.requestedAz))
+            self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, None, True, self.requestedRad, self.requestedRRStep, self.requestedAz, self.shouldPlotReports, self.shouldPlotLightning))
     def drawRHI(self):
         if self.requestedFile is not None:
             if self.requestedAz is not None:
-                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, None, self.requestedAz, True, self.requestedRad, self.requestedRRStep))
+                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, None, self.requestedAz, True, self.requestedRad, self.requestedRRStep, self.shouldPlotLightning))
 
 if __name__ == "__main__":
     app = wx.App()
