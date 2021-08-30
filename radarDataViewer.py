@@ -69,9 +69,11 @@ class radarDataViewerFrame(wx.Frame):
         controlsPanelSizer.Add(availTimesDropDown, 1, wx.EXPAND | wx.ALL, 20)
         shouldShowLtgBox = wx.CheckBox(controlsPanel, label="Show lightning?", style=wx.ALIGN_CENTER_VERTICAL)
         shouldShowLtgBox.Bind(EVT_CHECKBOX, self.onSetShowLtg)
+        self.shouldPlotLightning = False
         controlsPanelSizer.Add(shouldShowLtgBox, 1, wx.EXPAND | wx.ALL, 20)
         shouldShowRptsBox = wx.CheckBox(controlsPanel, label="Show Hail Reports?", style=wx.ALIGN_CENTER_VERTICAL)
         shouldShowRptsBox.Bind(EVT_CHECKBOX, self.onSetShowReports)
+        self.shouldPlotReports = False
         controlsPanelSizer.Add(shouldShowRptsBox, 1, wx.EXPAND | wx.ALL, 20)
         radiusText = wx.StaticText(controlsPanel, label="PPI map radius (km):", style=wx.ALIGN_CENTER_HORIZONTAL)
         controlsPanelSizer.Add(radiusText, 1, wx.EXPAND | wx.ALL, 20)

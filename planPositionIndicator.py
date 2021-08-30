@@ -145,7 +145,9 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
             fileStartTime = ltgSrc.starttime
             fileStartTime = dt(fileStartTime.year, fileStartTime.month, fileStartTime.day, fileStartTime.hour, (fileStartTime.minute - fileStartTime.minute%10), 0, tzinfo=timezone.utc)
             if fileStartTime > radarScanDT - timedelta(minutes=10):
-                ltgData = ltgSrc.readfile()
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore")
+                    ltgData = ltgSrc.readfile()
                 if ltgData.empty:
                     pass
                 else:
@@ -200,4 +202,4 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(50), repeat(10), repeat(None), repeat(False), repeat(True)))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(True)))
