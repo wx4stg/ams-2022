@@ -4,7 +4,7 @@
 
 from datetime import datetime as dt
 from datetime import timedelta, timezone
-from pandas.core.frame import DataFrame
+import xarray as xr
 import pyart
 from matplotlib import pyplot as plt
 from os import path, getcwd, listdir
@@ -138,23 +138,42 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         damageReports = damageReports.loc[startSearch:radarScanDT]
         ax.scatter(damageReports["BEGIN_LON"], damageReports["BEGIN_LAT"], s=10*damageReports["MAGNITUDE"], c="black")
     if plot_lightning:
-        inputDir = path.join(getcwd(), "sourceinput")
-        ltgSources = pd.DataFrame()
-        for ltgFile in sorted(listdir(inputDir)):
-            ltgSrc = readlma.lmafile(path.join(inputDir, ltgFile))
-            fileStartTime = ltgSrc.starttime
-            fileStartTime = dt(fileStartTime.year, fileStartTime.month, fileStartTime.day, fileStartTime.hour, (fileStartTime.minute - fileStartTime.minute%10), 0, tzinfo=timezone.utc)
-            if fileStartTime > radarScanDT - timedelta(minutes=10):
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore")
-                    ltgData = ltgSrc.readfile()
-                if ltgData.empty:
-                    pass
+        if path.isdir(path.join(getcwd(), "flashData/2d/")):
+            inputDir = path.join(getcwd(), "flashData/2d/")
+            for ltgFile in sorted(listdir(inputDir)):
+                ltgFile = path.join(inputDir, ltgFile)
+                ltgFlash = xr.open_dataset(ltgFile)
+                times = ltgFlash["time"].values
+                times = [pd.Timestamp(flashTime).to_pydatetime().replace(tzinfo=timezone.utc) for flashTime in times]
+                if times[0] > radarScanDT - timedelta(minutes=10):
+                    targetIdx = 0
+                    for flashTime in times:
+                        if flashTime < radarScanDT:
+                            targetIdx = times.index(flashTime)
+                    lats = ltgFlash["latitude"].values
+                    lons = ltgFlash["longitude"].values
+                    flashExtent = ltgFlash["flash_extent"].sel(ntimes=targetIdx)
+                    ax.contour(lons, lats, flashExtent, cmap="Greys", transform=ccrs.PlateCarree())
+                    break
                 else:
-                    ltgData["dtobjs"] = [dt(time.year, time.month, time.day, time.hour, time.minute, time.second, tzinfo=timezone.utc) for time in ltgData["Datetime"]]
-                    dataToPlot = ltgData.loc[ltgData.dtobjs <= radarScanDT]
-                    dataToPlot = dataToPlot.loc[dataToPlot.dtobjs >= radarScanDT - timedelta(minutes=2)]
-                    ax.scatter(dataToPlot["lon"], dataToPlot["lat"], s=0.01, c="#00000099", transform=ccrs.PlateCarree())
+                    continue
+        else:
+            inputDir = path.join(getcwd(), "sourceinput")
+            for ltgFile in sorted(listdir(inputDir)):
+                ltgSrc = readlma.lmafile(path.join(inputDir, ltgFile))
+                fileStartTime = ltgSrc.starttime
+                fileStartTime = dt(fileStartTime.year, fileStartTime.month, fileStartTime.day, fileStartTime.hour, (fileStartTime.minute - fileStartTime.minute%10), 0, tzinfo=timezone.utc)
+                if fileStartTime > radarScanDT - timedelta(minutes=10):
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore")
+                        ltgData = ltgSrc.readfile()
+                    if ltgData.empty:
+                        pass
+                    else:
+                        ltgData["dtobjs"] = [dt(time.year, time.month, time.day, time.hour, time.minute, time.second, tzinfo=timezone.utc) for time in ltgData["Datetime"]]
+                        dataToPlot = ltgData.loc[ltgData.dtobjs <= radarScanDT]
+                        dataToPlot = dataToPlot.loc[dataToPlot.dtobjs >= radarScanDT - timedelta(minutes=2)]
+                        ax.scatter(dataToPlot["lon"], dataToPlot["lat"], s=0.01, c="#00000099", transform=ccrs.PlateCarree())       
     infoString = str()
     if "instrument_name" in radar.metadata.keys():
         insStr = radar.metadata["instrument_name"]
@@ -167,7 +186,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
     elif "vcp_pattern" in radar.metadata.keys():
         infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
-    infoString = infoString + " PPI\n"
+    infoString = infoString + " PPI and Houston LMA VHF **FLASH**\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"
