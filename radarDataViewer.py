@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# wxPython-based GUI for researching plan view vs cross sectional radar data
+
 from os import listdir, getcwd, path
 import wx
 from wx.core import EVT_BUTTON, EVT_CHECKBOX, EVT_CHOICE, EVT_SLIDER

@@ -150,10 +150,11 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
                     for flashTime in times:
                         if flashTime < radarScanDT:
                             targetIdx = times.index(flashTime)
-                    lats = ltgFlash["latitude"].values
-                    lons = ltgFlash["longitude"].values
-                    flashExtent = ltgFlash["flash_extent"].sel(ntimes=targetIdx)
-                    ax.contour(lons, lats, flashExtent, cmap="Greys", transform=ccrs.PlateCarree())
+                    
+                    lon = ltgFlash.variables["longitude"].values
+                    lat = ltgFlash.variables["latitude"].values
+                    flashEx = ltgFlash["flash_extent"].values
+                    ax.pcolormesh(lon, lat, flashEx[targetIdx,:,:], cmap="Greys", zorder=0)
                     break
                 else:
                     continue
@@ -186,7 +187,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
     elif "vcp_pattern" in radar.metadata.keys():
         infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
-    infoString = infoString + " PPI and Houston LMA VHF **FLASH**\n"
+    infoString = infoString + " PPI and Houston LMA VHF Source\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"
@@ -197,6 +198,9 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
     infoString = infoString + radarScanDT.strftime("%d %b %Y %H:%M:%S UTC")
     ax.set_title(infoString)
+    #ax.set_extent([-98.5, -95, 30.25, 32.25])
+    ax.set_extent([-100, -92, 26.5, 33.25])
+    ax.gridlines(draw_labels=True)
     cbax = fig.add_axes([ax.get_position().x0, 0.075, (ax.get_position().width/3), .02])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
     cbax.set_xlabel("Reflectivity (dBZ)")
