@@ -4,7 +4,7 @@
 
 from datetime import datetime as dt
 from datetime import timedelta, timezone
-import xarray as xr
+from netCDF4 import Dataset
 import pyart
 from matplotlib import pyplot as plt
 from os import path, getcwd, listdir
@@ -18,6 +18,14 @@ from matplotlib import image as mpimage
 import pandas as pd
 from pyxlma.lmalib.io import read as readlma
 
+
+def centers_to_edges(x):
+    xedge=np.zeros(x.shape[0]+1)
+    xedge[1:-1] = (x[:-1] + x[1:])/2.0
+    dx = np.mean(np.abs(xedge[2:-1] - xedge[1:-2]))
+    xedge[0] = xedge[1] - dx
+    xedge[-1] = xedge[-2] + dx
+    return xedge
 
 def plot_ppi_map_modified(
             rmd, field, sweep=0, mask_tuple=None,
@@ -140,26 +148,55 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     if plot_lightning:
         if path.isdir(path.join(getcwd(), "flashData/2d/")):
             inputDir = path.join(getcwd(), "flashData/2d/")
+            ltgType = "Flash Extent Density"
             for ltgFile in sorted(listdir(inputDir)):
                 ltgFile = path.join(inputDir, ltgFile)
-                ltgFlash = xr.open_dataset(ltgFile)
-                times = ltgFlash["time"].values
-                times = [pd.Timestamp(flashTime).to_pydatetime().replace(tzinfo=timezone.utc) for flashTime in times]
-                if times[0] > radarScanDT - timedelta(minutes=10):
-                    targetIdx = 0
-                    for flashTime in times:
-                        if flashTime < radarScanDT:
-                            targetIdx = times.index(flashTime)
-                    
-                    lon = ltgFlash.variables["longitude"].values
-                    lat = ltgFlash.variables["latitude"].values
-                    flashEx = ltgFlash["flash_extent"].values
-                    ax.pcolormesh(lon, lat, flashEx[targetIdx,:,:], cmap="Greys", zorder=0)
+                ltgFlash = Dataset(ltgFile)
+                flashData = ltgFlash.variables
+                times = flashData["time"]
+                base_date = dt.strptime(times.units, "seconds since %Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                time_delta = timedelta(0, float(times[0]),0)
+                start_time = base_date + time_delta
+                if radarScanDT - timedelta(minutes=10) < start_time:
+                    flashDims = ltgFlash.dimensions
+                    lon = flashData["longitude"]
+                    lat = flashData["latitude"]
+                    grid = flashData["flash_extent"]
+                    grid_dims = grid.dimensions
+                    name_to_idx = dict((k, i) for i, k in enumerate(grid_dims))
+                    grid_t_idx = name_to_idx[times.dimensions[0]]
+                    n_frames = times.shape[0]
+                    density_maxes = []
+                    total_counts = []
+                    all_t = []
+                    xedge = centers_to_edges(lon)
+                    x_range = xedge.max() - xedge.min()
+                    yedge = centers_to_edges(lat)
+                    y_range = yedge.max() - yedge.min()
+                    dx = (xedge[1]-xedge[0])
+                    min_count, max_count = 1, grid[:].max()
+                    if (max_count == 0) | (max_count == 1 ):
+                        max_count = min_count+1
+                    default_vmin = -1.0
+                    if np.log10(max_count) <= default_vmin:
+                        vmin_count = np.log10(max_count) + default_vmin
+                    else:
+                        vmin_count = default_vmin
+                    indexer = [slice(None),]*len(grid.shape)
+
+                    frame_start_times = []
+                    for i in range(n_frames):
+                        frame_start = base_date + timedelta(seconds=float(times[i]))
+                        frame_start_times.append(frame_start)
+                        indexer[grid_t_idx] = i
+                        if frame_start > radarScanDT:
+                            break
+                    density = grid[indexer]
+                    ax.pcolormesh(xedge,yedge, np.log10(density.transpose()), vmin=vmin_count,vmax=np.log10(max_count), cmap="Greys")
                     break
-                else:
-                    continue
         else:
             inputDir = path.join(getcwd(), "sourceinput")
+            ltgType = "VHF Sources"
             for ltgFile in sorted(listdir(inputDir)):
                 ltgSrc = readlma.lmafile(path.join(inputDir, ltgFile))
                 fileStartTime = ltgSrc.starttime
@@ -187,7 +224,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
     elif "vcp_pattern" in radar.metadata.keys():
         infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
-    infoString = infoString + " PPI and Houston LMA VHF Source\n"
+    infoString = infoString+" PPI and Houston LMA "+ltgType+"\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"
@@ -198,8 +235,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
     infoString = infoString + radarScanDT.strftime("%d %b %Y %H:%M:%S UTC")
     ax.set_title(infoString)
-    #ax.set_extent([-98.5, -95, 30.25, 32.25])
-    ax.set_extent([-100, -92, 26.5, 33.25])
+    ax.set_extent([-98.5, -95, 30.25, 32.25])
     ax.gridlines(draw_labels=True)
     cbax = fig.add_axes([ax.get_position().x0, 0.075, (ax.get_position().width/3), .02])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
