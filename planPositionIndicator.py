@@ -129,7 +129,6 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     cmap.set_over("black")
     ADRADMapDisplay = pyart.graph.RadarMapDisplay(radar)
     plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
-    ADRADMapDisplay.set_aspect_ratio(1)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         ADRADMapDisplay.plot_range_rings(range(0, plotRadius+1, rangeRingStep), col="gray", ls="dotted")
@@ -158,7 +157,6 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
                 time_delta = timedelta(0, float(times[0]),0)
                 start_time = base_date + time_delta
                 if radarScanDT - timedelta(minutes=10) < start_time:
-                    flashDims = ltgFlash.dimensions
                     lon = flashData["longitude"]
                     lat = flashData["latitude"]
                     grid = flashData["flash_extent"]
@@ -166,14 +164,8 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
                     name_to_idx = dict((k, i) for i, k in enumerate(grid_dims))
                     grid_t_idx = name_to_idx[times.dimensions[0]]
                     n_frames = times.shape[0]
-                    density_maxes = []
-                    total_counts = []
-                    all_t = []
                     xedge = centers_to_edges(lon)
-                    x_range = xedge.max() - xedge.min()
                     yedge = centers_to_edges(lat)
-                    y_range = yedge.max() - yedge.min()
-                    dx = (xedge[1]-xedge[0])
                     min_count, max_count = 1, grid[:].max()
                     if (max_count == 0) | (max_count == 1 ):
                         max_count = min_count+1
@@ -183,16 +175,15 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
                     else:
                         vmin_count = default_vmin
                     indexer = [slice(None),]*len(grid.shape)
-
-                    frame_start_times = []
                     for i in range(n_frames):
                         frame_start = base_date + timedelta(seconds=float(times[i]))
-                        frame_start_times.append(frame_start)
                         indexer[grid_t_idx] = i
                         if frame_start > radarScanDT:
                             break
                     density = grid[indexer]
-                    ax.pcolormesh(xedge,yedge, np.log10(density.transpose()), vmin=vmin_count,vmax=np.log10(max_count), cmap="Greys")
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore")
+                        ax.pcolormesh(xedge,yedge, np.log10(density.transpose()), vmin=vmin_count,vmax=np.log10(max_count), cmap="Greys")
                     break
         else:
             inputDir = path.join(getcwd(), "sourceinput")
@@ -235,7 +226,16 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
     infoString = infoString + radarScanDT.strftime("%d %b %Y %H:%M:%S UTC")
     ax.set_title(infoString)
-    ax.set_extent([-98.5, -95, 30.25, 32.25])
+    if path.exists("stormlocations.csv"):
+        stormLocs = pd.read_csv("stormlocations.csv")
+        stormLoc = stormLocs.loc[stormLocs["time"] == radarScanDT.strftime("%d.%H.%M.%S")]
+        try:
+            ax.set_extent([float(stormLoc["lonmin"]), float(stormLoc["lonmax"]), float(stormLoc["latmin"]), float(stormLoc["latmax"])])
+        except Exception as e:
+            print("ERR! ERR! ERR!")
+            print(radarScanDT)
+    else:
+        ax.set_extent([-98.5, -95, 30.25, 32.25])
     ax.gridlines(draw_labels=True)
     cbax = fig.add_axes([ax.get_position().x0, 0.075, (ax.get_position().width/3), .02])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
