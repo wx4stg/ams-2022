@@ -217,10 +217,18 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     infoString = str()
     if path.exists("stormlocations.csv"):
         stormLocs = pd.read_csv("stormlocations.csv")
-        stormLoc = stormLocs.loc[stormLocs["time"] == radarScanDT.strftime("%d.%H.%M.%S")]
         infoString = "Storm-Following "
+        stormLocs["londiff"] = stormLocs["lonmax"] - stormLocs["lonmin"]
+        maxLonDiff = max(stormLocs["londiff"])
+        stormLocs["latdiff"] = stormLocs["latmax"] - stormLocs["latmin"]
+        maxLatDiff = max(stormLocs["latdiff"])
+        stormLoc = stormLocs.loc[stormLocs["time"] == radarScanDT.strftime("%d.%H.%M.%S")]
+        minLon = np.mean([float(stormLoc["lonmin"]), float(stormLoc["lonmax"])]) - maxLonDiff/2
+        maxLon = np.mean([float(stormLoc["lonmin"]), float(stormLoc["lonmax"])]) + maxLonDiff/2
+        minLat = np.mean([float(stormLoc["latmin"]), float(stormLoc["latmax"])]) - maxLatDiff/2
+        maxLat = np.mean([float(stormLoc["latmin"]), float(stormLoc["latmax"])]) + maxLatDiff/2
         try:
-            ax.set_extent([float(stormLoc["lonmin"]), float(stormLoc["lonmax"]), float(stormLoc["latmin"]), float(stormLoc["latmax"])])
+            ax.set_extent([minLon, maxLon, minLat, maxLat])
         except Exception as e:
             print("ERR! ERR! ERR!")
             print(radarScanDT)
@@ -277,4 +285,4 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(False), repeat("reflectivity")))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(False), repeat("velocity")))
