@@ -105,7 +105,7 @@ def plot_ppi_map_modified(
         rmd.ax = ax
         return pm
 
-def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False, plot_lightning=False):
+def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False, plot_lightning=False, field="reflectivity"):
     px = 1/plt.rcParams["figure.dpi"]
     basePath = path.join(getcwd(), "output")
     radarDataDir = path.join(getcwd(), "radarData")
@@ -124,11 +124,21 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     else:
         fig.set_size_inches(1920*px, 1080*px)
         
-    norm, cmap = ctables.registry.get_with_steps("NWSReflectivity", 5, 5)
-    cmap.set_under("#00000000")
-    cmap.set_over("black")
+    
     ADRADMapDisplay = pyart.graph.RadarMapDisplay(radar)
-    plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+    if field == "reflectivity":
+        norm, cmap = ctables.registry.get_with_steps("NWSReflectivity", 5, 5)
+        cmap.set_under("#00000000")
+        cmap.set_over("black")
+        cbStr = "Reflectivity (dBZ)"
+        plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+    elif field == "velocity":
+        norm, cmap = ctables.registry.get_with_steps("NWS8bitVel", -100, 1)
+        cbStr = "Velocity (m/s)"
+        plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "velocity", 1, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+    elif field == "differential_reflectivity":
+        cbStr = "Differential Reflectivity (dB)"
+        plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "differential_reflectivity", 0, resolution="10m", embelish=False, cmap="pyart_RefDiff", vmin=-1, vmax=8, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         ADRADMapDisplay.plot_range_rings(range(0, plotRadius+1, rangeRingStep), col="gray", ls="dotted")
@@ -144,6 +154,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         startSearch = radarScanDT - timedelta(hours=1)
         damageReports = damageReports.loc[startSearch:radarScanDT]
         ax.scatter(damageReports["BEGIN_LON"], damageReports["BEGIN_LAT"], s=10*damageReports["MAGNITUDE"], c="black")
+    ltgType = False
     if plot_lightning:
         if path.isdir(path.join(getcwd(), "flashData/2d/")):
             inputDir = path.join(getcwd(), "flashData/2d/")
@@ -204,18 +215,33 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
                         dataToPlot = dataToPlot.loc[dataToPlot.dtobjs >= radarScanDT - timedelta(minutes=2)]
                         ax.scatter(dataToPlot["lon"], dataToPlot["lat"], s=0.01, c="#00000099", transform=ccrs.PlateCarree())       
     infoString = str()
+    if path.exists("stormlocations.csv"):
+        stormLocs = pd.read_csv("stormlocations.csv")
+        stormLoc = stormLocs.loc[stormLocs["time"] == radarScanDT.strftime("%d.%H.%M.%S")]
+        infoString = "Storm-Following "
+        try:
+            ax.set_extent([float(stormLoc["lonmin"]), float(stormLoc["lonmax"]), float(stormLoc["latmin"]), float(stormLoc["latmax"])])
+        except Exception as e:
+            print("ERR! ERR! ERR!")
+            print(radarScanDT)
+    else:
+        ax.set_extent([-98.5, -95, 30.25, 32.25])
+        infoString = ""
     if "instrument_name" in radar.metadata.keys():
         insStr = radar.metadata["instrument_name"]
         try:
             insStr = insStr.decode()
         except (UnicodeDecodeError, AttributeError, TypeError):
             pass
-        infoString = insStr
+        infoString = infoString+insStr
     if "sigmet_task_name" in radar.metadata.keys():
         infoString = infoString + " " +radar.metadata["sigmet_task_name"].decode().replace("  ", "")
     elif "vcp_pattern" in radar.metadata.keys():
         infoString = infoString + " VCP-" +str(radar.metadata["vcp_pattern"])
-    infoString = infoString+" PPI and Houston LMA "+ltgType+"\n"
+    if type(ltgType) == type("THIS IS A STRING"):
+        infoString = infoString+" PPI and Houston LMA "+ltgType+"\n"
+    else:
+        infoString = infoString+" PPI\n"
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"
@@ -226,20 +252,10 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
     infoString = infoString + radarScanDT.strftime("%d %b %Y %H:%M:%S UTC")
     ax.set_title(infoString)
-    if path.exists("stormlocations.csv"):
-        stormLocs = pd.read_csv("stormlocations.csv")
-        stormLoc = stormLocs.loc[stormLocs["time"] == radarScanDT.strftime("%d.%H.%M.%S")]
-        try:
-            ax.set_extent([float(stormLoc["lonmin"]), float(stormLoc["lonmax"]), float(stormLoc["latmin"]), float(stormLoc["latmax"])])
-        except Exception as e:
-            print("ERR! ERR! ERR!")
-            print(radarScanDT)
-    else:
-        ax.set_extent([-98.5, -95, 30.25, 32.25])
     ax.gridlines(draw_labels=True)
     cbax = fig.add_axes([ax.get_position().x0, 0.075, (ax.get_position().width/3), .02])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
-    cbax.set_xlabel("Reflectivity (dBZ)")
+    cbax.set_xlabel(cbStr)
     lax = fig.add_axes([ax.get_position().x0+2*(ax.get_position().width/3), 0.015, (ax.get_position().width/3), .1])
     lax.set_aspect(2821/11071)
     plt.setp(lax.spines.values(), visible=False)
@@ -261,4 +277,4 @@ if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(getcwd(), "radarData")
     with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(True)))
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(False), repeat("reflectivity")))
