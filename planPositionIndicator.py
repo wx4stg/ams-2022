@@ -7,7 +7,7 @@ from datetime import timedelta, timezone
 from netCDF4 import Dataset
 import pyart
 from matplotlib import pyplot as plt
-from os import path, getcwd, listdir
+from os import path, listdir
 from cartopy import crs as ccrs
 from metpy.plots import ctables
 from metpy.plots import USCOUNTIES
@@ -16,99 +16,17 @@ import warnings
 import multiprocessing as mp
 from matplotlib import image as mpimage
 import pandas as pd
-from pyxlma.lmalib.io import read as readlma
+from pyxlma.lmalib.io import read as lma_read
+from pyxlma.lmalib.flash.cluster import cluster_flashes
+from pyxlma.lmalib.grid import  create_regular_grid, assign_regular_bins, events_to_grid
 
-
-def centers_to_edges(x):
-    xedge=np.zeros(x.shape[0]+1)
-    xedge[1:-1] = (x[:-1] + x[1:])/2.0
-    dx = np.mean(np.abs(xedge[2:-1] - xedge[1:-2]))
-    xedge[0] = xedge[1] - dx
-    xedge[-1] = xedge[-2] + dx
-    return xedge
-
-def plot_ppi_map_modified(
-            rmd, field, sweep=0, mask_tuple=None,
-            vmin=None, vmax=None, cmap=None, norm=None, mask_outside=False,
-            title=None, title_flag=True,
-            colorbar_flag=True, colorbar_label=None, ax=None, fig=None,
-            lat_lines=None, lon_lines=None, projection=None,
-            min_lon=None, max_lon=None, min_lat=None, max_lat=None,
-            width=None, height=None, lon_0=None, lat_0=None,
-            resolution='110m', shapefile=None, shapefile_kwargs=None,
-            edges=True, gatefilter=None,
-            filter_transitions=True, embelish=True, raster=False,
-            ticks=None, ticklabs=None, alpha=None):
-        # parse parameters
-        ax, fig = pyart.graph.common.parse_ax_fig(ax, fig)
-        vmin, vmax = pyart.graph.common.parse_vmin_vmax(rmd._radar, field, vmin, vmax)
-        cmap = pyart.graph.common.parse_cmap(cmap, field)
-        if lat_lines is None:
-            lat_lines = np.arange(30, 46, 1)
-        if lon_lines is None:
-            lon_lines = np.arange(-110, -75, 1)
-        lat_0 = rmd.loc[0]
-        lon_0 = rmd.loc[1]
-
-        # get data for the plot
-        data = rmd._get_data(
-            field, sweep, mask_tuple, filter_transitions, gatefilter)
-        x, y = rmd._get_x_y(sweep, edges, filter_transitions)
-
-        # mask the data where outside the limits
-        if mask_outside:
-            data = np.ma.masked_outside(data, vmin, vmax)
-
-        # initialize instance of GeoAxes if not provided
-        if hasattr(ax, 'projection'):
-            projection = ax.projection
-        else:
-            if projection is None:
-                # set map projection to LambertConformal if none is specified
-                projection = ccrs.LambertConformal(
-                    central_longitude=lon_0, central_latitude=lat_0)
-                warnings.warn("No projection was defined for the axes."
-                              + " Overridding defined axes and using default "
-                              + "axes.", UserWarning)
-            ax = plt.axes(projection=projection)
-
-        if min_lon:
-            ax.set_extent([min_lon, max_lon, min_lat, max_lat],
-                          crs=ccrs.PlateCarree())
-        elif width:
-            ax.set_extent([-width/2., width/2., -height/2., height/2.],
-                          crs=rmd.grid_projection)
-
-        # plot the data
-        if norm is not None:  # if norm is set do not override with vmin/vmax
-            vmin = vmax = None
-        pm = ax.pcolormesh(x * 1000., y * 1000., data, alpha=alpha,
-                           vmin=vmin, vmax=vmax, cmap=cmap,
-                           norm=norm, transform=rmd.grid_projection)
-
-        # plot as raster in vector graphics files
-        if raster:
-            pm.set_rasterized(True)
-
-        if title_flag:
-            rmd._set_title(field, sweep, title, ax)
-
-        # add plot and field to lists
-        rmd.plots.append(pm)
-        rmd.plot_vars.append(field)
-
-        if colorbar_flag:
-            rmd.plot_colorbar(
-                mappable=pm, label=colorbar_label, field=field, fig=fig,
-                ax=ax, ticks=ticks, ticklabs=ticklabs)
-        # keep track of this GeoAxes object for later
-        rmd.ax = ax
-        return pm
+basePath = path.dirname(path.realpath(__file__))
+axExtent = [-98.5, -95, 30.25, 32.25]
 
 def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False, plot_lightning=False, field="reflectivity"):
     px = 1/plt.rcParams["figure.dpi"]
-    basePath = path.join(getcwd(), "output")
-    radarDataDir = path.join(getcwd(), "radarData")
+    outputPath = path.join(basePath, "output")
+    radarDataDir = path.join(basePath, "radarData")
     radarFilePath = path.join(radarDataDir, radarFileName)
     try:
         radar = pyart.io.read(radarFilePath)
@@ -119,30 +37,25 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         logFile.close()
         return
     fig, ax = plt.subplots(1, 1, subplot_kw={'projection': ccrs.PlateCarree()})
-    if isPreviewRes:
-        fig.set_size_inches(768*px, 768*px)
-    else:
-        fig.set_size_inches(1920*px, 1080*px)
-        
-    
     ADRADMapDisplay = pyart.graph.RadarMapDisplay(radar)
     if field == "reflectivity":
         norm, cmap = ctables.registry.get_with_steps("NWSReflectivity", 5, 5)
         cmap.set_under("#00000000")
         cmap.set_over("black")
         cbStr = "Reflectivity (dBZ)"
-        plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+        ADRADMapDisplay.plot_ppi_map("reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     elif field == "velocity":
         norm, cmap = ctables.registry.get_with_steps("NWS8bitVel", -100, 1)
         cbStr = "Velocity (m/s)"
-        plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "velocity", 1, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+        ADRADMapDisplay.plot_ppi_map("velocity", 1, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     elif field == "differential_reflectivity":
         cbStr = "Differential Reflectivity (dB)"
-        plotHandle = plot_ppi_map_modified(ADRADMapDisplay, "differential_reflectivity", 0, resolution="10m", embelish=False, cmap="pyart_RefDiff", vmin=-1, vmax=8, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+        ADRADMapDisplay.plot_ppi_map("differential_reflectivity", 0, resolution="10m", embelish=False, cmap="pyart_RefDiff", vmin=-1, vmax=8, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+    plotHandle = ax.get_children()[0]
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         ADRADMapDisplay.plot_range_rings(range(0, plotRadius+1, rangeRingStep), col="gray", ls="dotted")
-    ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray")
+    ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray", zorder=3)
     if plot_radial is not None:
         ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+5*np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+5*np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
     radarScanDT = pyart.util.datetime_from_radar(radar)
@@ -155,65 +68,83 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         damageReports = damageReports.loc[startSearch:radarScanDT]
         ax.scatter(damageReports["BEGIN_LON"], damageReports["BEGIN_LAT"], s=10*damageReports["MAGNITUDE"], c="black")
     ltgType = False
+    flashContours = ""
     if plot_lightning:
-        if path.isdir(path.join(getcwd(), "flashData/2d/")):
-            inputDir = path.join(getcwd(), "flashData/2d/")
-            ltgType = "Flash Extent Density"
-            for ltgFile in sorted(listdir(inputDir)):
-                ltgFile = path.join(inputDir, ltgFile)
-                ltgFlash = Dataset(ltgFile)
-                flashData = ltgFlash.variables
-                times = flashData["time"]
-                base_date = dt.strptime(times.units, "seconds since %Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                time_delta = timedelta(0, float(times[0]),0)
-                start_time = base_date + time_delta
-                if radarScanDT - timedelta(minutes=10) < start_time:
-                    lon = flashData["longitude"]
-                    lat = flashData["latitude"]
-                    grid = flashData["flash_extent"]
-                    grid_dims = grid.dimensions
-                    name_to_idx = dict((k, i) for i, k in enumerate(grid_dims))
-                    grid_t_idx = name_to_idx[times.dimensions[0]]
-                    n_frames = times.shape[0]
-                    xedge = centers_to_edges(lon)
-                    yedge = centers_to_edges(lat)
-                    min_count, max_count = 1, grid[:].max()
-                    if (max_count == 0) | (max_count == 1 ):
-                        max_count = min_count+1
-                    default_vmin = -1.0
-                    if np.log10(max_count) <= default_vmin:
-                        vmin_count = np.log10(max_count) + default_vmin
-                    else:
-                        vmin_count = default_vmin
-                    indexer = [slice(None),]*len(grid.shape)
-                    for i in range(n_frames):
-                        frame_start = base_date + timedelta(seconds=float(times[i]))
-                        indexer[grid_t_idx] = i
-                        if frame_start > radarScanDT:
-                            break
-                    density = grid[indexer]
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore")
-                        ax.pcolormesh(xedge,yedge, np.log10(density.transpose()), vmin=vmin_count,vmax=np.log10(max_count), cmap="Greys")
-                    break
-        else:
-            inputDir = path.join(getcwd(), "sourceinput")
-            ltgType = "VHF Sources"
-            for ltgFile in sorted(listdir(inputDir)):
-                ltgSrc = readlma.lmafile(path.join(inputDir, ltgFile))
-                fileStartTime = ltgSrc.starttime
-                fileStartTime = dt(fileStartTime.year, fileStartTime.month, fileStartTime.day, fileStartTime.hour, (fileStartTime.minute - fileStartTime.minute%10), 0, tzinfo=timezone.utc)
-                if fileStartTime > radarScanDT - timedelta(minutes=10):
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore")
-                        ltgData = ltgSrc.readfile()
-                    if ltgData.empty:
-                        pass
-                    else:
-                        ltgData["dtobjs"] = [dt(time.year, time.month, time.day, time.hour, time.minute, time.second, tzinfo=timezone.utc) for time in ltgData["Datetime"]]
-                        dataToPlot = ltgData.loc[ltgData.dtobjs <= radarScanDT]
-                        dataToPlot = dataToPlot.loc[dataToPlot.dtobjs >= radarScanDT - timedelta(minutes=2)]
-                        ax.scatter(dataToPlot["lon"], dataToPlot["lat"], s=0.01, c="#00000099", transform=ccrs.PlateCarree())       
+        ltgFiles = sorted(listdir(path.join(basePath, "lightningin")))
+        radarFiles = sorted(listdir(path.join(basePath, "radarData")))
+        i_want_exact = False
+        if "0600.dat.gz" in ltgFiles[0]:
+            numMins = 10
+            targetTimes = [dt(radarScanDT.year, radarScanDT.month, radarScanDT.day, radarScanDT.hour, (radarScanDT.minute) - radarScanDT.minute % 10, 0).replace(tzinfo=None), radarScanDT.replace(tzinfo=None)]
+        elif "0060.dat.gz" in ltgFiles[0]:
+            numMins = 1
+            lastRadFileName = radarFiles[radarFiles.index(radarFileName) - 1]
+            if "TAMU" in lastRadFileName:
+                radFileArr = lastRadFileName.split("_")
+                timeOfLastScan = dt.strptime(radFileArr[1]+radFileArr[2], "%Y%m%d%H%M")
+            elif "V06" in lastRadFileName:
+                radFileArr = lastRadFileName[4:].split("_")
+                timeOfLastScan = dt.strptime(radFileArr[0]+radFileArr[1], "%Y%m%d%H%M%S")
+            targetTimes = [timeOfLastScan.replace(tzinfo=None), radarScanDT.replace(tzinfo=None)]
+        targetLtgFiles = list()
+        for file in ltgFiles:
+            timeOfFileArr = file.split("_")
+            ltgFileTime = dt.strptime("20"+timeOfFileArr[1]+timeOfFileArr[2], "%Y%m%d%H%M%S").replace(tzinfo=None) + timedelta(minutes=1)
+            if i_want_exact:
+                if dt(ltgFileTime.year, ltgFileTime.month, ltgFileTime.day, ltgFileTime.hour, ltgFileTime.minute, 0) == dt(radarScanDT.year, radarScanDT.month, radarScanDT.day, radarScanDT.hour, radarScanDT.minute, 0):
+                    targetLtgFiles = [path.join(basePath, "lightningin", file)]
+            else:
+                if ltgFileTime >= targetTimes[0] and ltgFileTime < targetTimes[1]:
+                    targetLtgFiles.append(path.join(basePath, "lightningin", file))
+        if len(targetLtgFiles) > 0:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+                # Read in LMA data
+                lmaData, startTimeOfPlot = lma_read.dataset(targetLtgFiles)
+            timeOfPlot = startTimeOfPlot + numMins*timedelta(minutes=len(targetLtgFiles))
+            dttuple = (np.datetime64(startTimeOfPlot), np.datetime64(timeOfPlot))
+            grid_dt = np.asarray(60, dtype='m8[s]')
+            grid_t0 = np.asarray(dttuple[0]).astype('datetime64[ns]')
+            grid_t1 = np.asarray(dttuple[1]).astype('datetime64[ns]')
+            time_range = (grid_t0, grid_t1+grid_dt, grid_dt)
+            # We only want events with chi^2 less than 1
+            lmaData = lmaData[{"number_of_events":(lmaData.event_chi2 <= 1.0)}]
+            lmaData = cluster_flashes(lmaData)
+            lat_range = (axExtent[2], axExtent[3], 0.025)
+            lon_range = (axExtent[0], axExtent[1], 0.025)
+            alt_range = (0, 18e3, 1.0e3)
+            grid_edge_ranges ={
+                'grid_latitude_edge':lat_range,
+                'grid_longitude_edge':lon_range,
+                'grid_altitude_edge':alt_range,
+                'grid_time_edge':time_range,
+            }
+            grid_center_names ={
+                'grid_latitude_edge':'grid_latitude',
+                'grid_longitude_edge':'grid_longitude',
+                'grid_altitude_edge':'grid_altitude',
+                'grid_time_edge':'grid_time',
+            }
+            event_coord_names = {
+                'event_latitude':'grid_latitude_edge',
+                'event_longitude':'grid_longitude_edge',
+                'event_altitude':'grid_altitude_edge',
+                'event_time':'grid_time_edge',
+            }
+            grid_ds = create_regular_grid(grid_edge_ranges, grid_center_names)
+            ds_ev = assign_regular_bins(grid_ds, lmaData, event_coord_names, pixel_id_var="event_pixel_id", append_indices=True)
+            grid_spatial_coords=['grid_time', None, 'grid_latitude', 'grid_longitude']
+            event_spatial_vars = ('event_altitude', 'event_latitude', 'event_longitude')
+            griddedLmaData = events_to_grid(ds_ev, grid_ds, min_points_per_flash=3, pixel_id_var="event_pixel_id", event_spatial_vars=event_spatial_vars, grid_spatial_coords=grid_spatial_coords)
+            griddedLmaData = griddedLmaData.isel(grid_time=0)
+            try:
+                flashContours = ax.contourf(griddedLmaData.flash_extent_density.grid_longitude, griddedLmaData.flash_extent_density.grid_latitude, griddedLmaData.flash_extent_density.data, levels=np.arange(1, 14.01, 0.1), cmap="plasma", alpha=0.5, transform=ccrs.PlateCarree())
+            except Exception as e:
+                if "GEOSContains" in str(e):
+                    return
+                else:
+                    raise e
+            
     infoString = str()
     if path.exists("stormlocations.csv"):
         stormLocs = pd.read_csv("stormlocations.csv")
@@ -233,7 +164,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
             print("ERR! ERR! ERR!")
             print(radarScanDT)
     else:
-        ax.set_extent([-98.5, -95, 30.25, 32.25])
+        ax.set_extent(axExtent)
         infoString = ""
     if "instrument_name" in radar.metadata.keys():
         insStr = radar.metadata["instrument_name"]
@@ -259,30 +190,45 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         maxRange = np.round(np.max(radar.instrument_parameters["unambiguous_range"]["data"])/1000, 0)
         infoString = infoString + "    Max Range: " + str(maxRange) + " km\n"
     infoString = infoString + radarScanDT.strftime("%d %b %Y %H:%M:%S UTC")
-    ax.set_title(infoString)
     ax.gridlines(draw_labels=True)
-    cbax = fig.add_axes([ax.get_position().x0, 0.075, (ax.get_position().width/3), .02])
+    ax.set_position([0.05, 0.11, .9, .87])
+    cbax = fig.add_axes([0, 0, (ax.get_position().width/3), .025])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
-    cbax.set_xlabel(cbStr)
-    lax = fig.add_axes([ax.get_position().x0+2*(ax.get_position().width/3), 0.015, (ax.get_position().width/3), .1])
+    cbax.set_position([0.05, ax.get_position().y0-.1-cbax.get_position().height, cbax.get_position().width, cbax.get_position().height])
+    if flashContours is not "":
+        cbax2 = fig.add_axes([0, 0, (ax.get_position().width/3), .025])
+        fig.colorbar(flashContours, cax=cbax2, orientation="horizontal", label="Flash Extent Density", extend="max").set_ticks(np.arange(1, 14.01, 1))
+        cbax2.set_position([0.05, ax.get_position().y0-.1-cbax.get_position().height-.01-cbax2.get_position().height, cbax2.get_position().width, cbax2.get_position().height])
+    tax = fig.add_axes([0,0,(ax.get_position().width/3),.05])
+    tax.text(0.5, 0.5, infoString, horizontalalignment="center", verticalalignment="center", fontsize=16)
+    tax.set_xlabel("Plot by Sam Gardner")
+    plt.setp(tax.spines.values(), visible=False)
+    tax.tick_params(left=False, labelleft=False)
+    tax.tick_params(bottom=False, labelbottom=False)
+    tax.set_position([(ax.get_position().width/2)-(tax.get_position().width/2)+ax.get_position().x0,ax.get_position().y0-.1-tax.get_position().height,tax.get_position().width,tax.get_position().height], which="both")
+    lax = fig.add_axes([0,0,(ax.get_position().width/3),1])
     lax.set_aspect(2821/11071)
+    lax.axis("off")
     plt.setp(lax.spines.values(), visible=False)
-    lax.tick_params(left=False, labelleft=False)
-    lax.tick_params(bottom=False, labelbottom=False)
-    lax.set_xlabel("Plot by Sam Gardner")
     atmoLogo = mpimage.imread("assets/atmoLogo.png")
     lax.imshow(atmoLogo)
+    lax.set_position([.95-lax.get_position().width, ax.get_position().y0-.1-lax.get_position().height, lax.get_position().width, lax.get_position().height], which="both")
+    fig.set_facecolor("white")
     if  isPreviewRes:
+        fig.set_size_inches(768*px, 768*px)
         return fig
     else:
+        fig.set_size_inches(2560*px, 1440*px)
         if saveFileName is not None:
-            fig.savefig(saveFileName, bbox_inches="tight")
+            fig.savefig(saveFileName)
         else:
-            fig.savefig(path.join(basePath, str(sorted(listdir(radarDataDir)).index(radarFileName))+".png"), bbox_inches="tight")
+            fig.savefig(path.join(outputPath, str(sorted(listdir(radarDataDir)).index(radarFileName))+".png"))
         plt.close(fig)
 
 if __name__ == "__main__":
     from itertools import repeat
-    radarDataDir = path.join(getcwd(), "radarData")
-    with mp.Pool(processes=12) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(False), repeat("velocity")))
+    radarDataDir = path.join(basePath, "radarData")
+    # plot_radar(sorted(listdir(radarDataDir))[0], None, False, 200, 50, None, False, True, "reflectivity")
+    # exit()
+    with mp.Pool(processes=8) as pool:
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(True), repeat("reflectivity")))
