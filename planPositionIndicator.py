@@ -23,7 +23,7 @@ from pyxlma.lmalib.grid import  create_regular_grid, assign_regular_bins, events
 basePath = path.dirname(path.realpath(__file__))
 axExtent = [-98.5, -95, 30.25, 32.25]
 
-def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_radial=None, plot_damage=False, plot_lightning=False, field="reflectivity"):
+def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=160, rangeRingStep=None, plot_lat=None, plot_damage=False, plot_lightning=False, field="reflectivity"):
     px = 1/plt.rcParams["figure.dpi"]
     outputPath = path.join(basePath, "output")
     radarDataDir = path.join(basePath, "radarData")
@@ -56,8 +56,9 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         warnings.filterwarnings("ignore")
         ADRADMapDisplay.plot_range_rings(range(0, plotRadius+1, rangeRingStep), col="gray", ls="dotted")
     ax.add_feature(USCOUNTIES.with_scale("5m"), edgecolor="gray", zorder=3)
-    if plot_radial is not None:
-        ax.plot([radar.longitude["data"][0], radar.longitude["data"][0]+5*np.sin(np.deg2rad(plot_radial))], [radar.latitude["data"][0], radar.latitude["data"][0]+5*np.cos(np.deg2rad(plot_radial))], color="black", linewidth=3)
+    if plot_lat is not None:
+        print(plot_lat)
+        ax.plot([-180, 180], [plot_lat, plot_lat], color="black", linewidth=3, transform=ccrs.PlateCarree())
     radarScanDT = pyart.util.datetime_from_radar(radar)
     radarScanDT = dt(radarScanDT.year, radarScanDT.month, radarScanDT.day, radarScanDT.hour, radarScanDT.minute, radarScanDT.second, tzinfo=timezone.utc)
     if plot_damage:
@@ -228,7 +229,5 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
 if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(basePath, "radarData")
-    # plot_radar(sorted(listdir(radarDataDir))[0], None, False, 200, 50, None, False, True, "reflectivity")
-    # exit()
     with mp.Pool(processes=8) as pool:
         pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(True), repeat("reflectivity")))
