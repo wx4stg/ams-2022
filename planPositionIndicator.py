@@ -38,19 +38,26 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
         return
     fig, ax = plt.subplots(1, 1, subplot_kw={'projection': ccrs.PlateCarree()})
     ADRADMapDisplay = pyart.graph.RadarMapDisplay(radar)
+    sweepNum = 0
     if field == "reflectivity":
         norm, cmap = ctables.registry.get_with_steps("NWSReflectivity", 5, 5)
         cmap.set_under("#00000000")
         cmap.set_over("black")
         cbStr = "Reflectivity (dBZ)"
-        ADRADMapDisplay.plot_ppi_map("reflectivity", 0, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+        ADRADMapDisplay.plot_ppi_map("reflectivity", sweepNum, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     elif field == "velocity":
         norm, cmap = ctables.registry.get_with_steps("NWS8bitVel", -100, 1)
         cbStr = "Velocity (m/s)"
-        ADRADMapDisplay.plot_ppi_map("velocity", 1, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+        sweepNum = 1
+        ADRADMapDisplay.plot_ppi_map("velocity", sweepNum, resolution="10m", embelish=False, cmap=cmap, norm=norm, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     elif field == "differential_reflectivity":
         cbStr = "Differential Reflectivity (dB)"
-        ADRADMapDisplay.plot_ppi_map("differential_reflectivity", 0, resolution="10m", embelish=False, cmap="pyart_RefDiff", vmin=-1, vmax=8, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+        sweepNum = 4
+        ADRADMapDisplay.plot_ppi_map("differential_reflectivity", sweepNum, resolution="10m", embelish=False, cmap="pyart_RefDiff", vmin=-1, vmax=8, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
+    elif field == "spectrum_width":
+        cbStr = "Spectrum Width (m/s)"
+        sweepNum = 1
+        ADRADMapDisplay.plot_ppi_map("spectrum_width", sweepNum, resolution="10m", embelish=False, cmap="pyart_NWS_SPW", vmin=0, vmax=25, colorbar_flag=False, width=2*plotRadius*1000, height=2*plotRadius*1000)
     plotHandle = ax.get_children()[0]
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
@@ -111,8 +118,8 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
             # We only want events with chi^2 less than 1
             lmaData = lmaData[{"number_of_events":(lmaData.event_chi2 <= 1.0)}]
             lmaData = cluster_flashes(lmaData)
-            lat_range = (axExtent[2], axExtent[3], 0.025)
-            lon_range = (axExtent[0], axExtent[1], 0.025)
+            lat_range = (axExtent[2], axExtent[3], 0.0125)
+            lon_range = (axExtent[0], axExtent[1], 0.0125)
             alt_range = (0, 18e3, 1.0e3)
             grid_edge_ranges ={
                 'grid_latitude_edge':lat_range,
@@ -137,9 +144,10 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
             grid_spatial_coords=['grid_time', None, 'grid_latitude', 'grid_longitude']
             event_spatial_vars = ('event_altitude', 'event_latitude', 'event_longitude')
             griddedLmaData = events_to_grid(ds_ev, grid_ds, min_points_per_flash=3, pixel_id_var="event_pixel_id", event_spatial_vars=event_spatial_vars, grid_spatial_coords=grid_spatial_coords)
-            griddedLmaData = griddedLmaData.isel(grid_time=0)
+            griddedLmaData = griddedLmaData.sum("grid_time")
+            zeroMask = np.where(griddedLmaData.flash_extent_density.data < 1.0, 1, 0)
             try:
-                flashContours = ax.contourf(griddedLmaData.flash_extent_density.grid_longitude, griddedLmaData.flash_extent_density.grid_latitude, griddedLmaData.flash_extent_density.data, levels=np.arange(1, 14.01, 0.1), cmap="plasma", alpha=0.5, transform=ccrs.PlateCarree())
+                flashContours = ax.pcolormesh(griddedLmaData.flash_extent_density.grid_longitude, griddedLmaData.flash_extent_density.grid_latitude, np.ma.masked_array(griddedLmaData.flash_extent_density.data, mask=zeroMask), vmin=1, vmax=14, cmap="autumn", alpha=0.5, transform=ccrs.PlateCarree())
             except Exception as e:
                 if "GEOSContains" in str(e):
                     return
@@ -185,7 +193,7 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     if "prt" in radar.instrument_parameters:
         prf = np.round(1/np.mean(radar.instrument_parameters["prt"]["data"]), 0)
         infoString = infoString + "Avg. PRF: " + str(prf) + " Hz"
-    elevation = np.round(radar.fixed_angle["data"][0], 1)
+    elevation = np.round(radar.fixed_angle["data"][sweepNum], 1)
     infoString = infoString + "    Elevation: " + str(elevation) + "°"
     if "unambiguous_range" in radar.instrument_parameters:
         maxRange = np.round(np.max(radar.instrument_parameters["unambiguous_range"]["data"])/1000, 0)
@@ -196,9 +204,10 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
     cbax = fig.add_axes([0, 0, (ax.get_position().width/3), .025])
     fig.colorbar(plotHandle, cax=cbax, orientation="horizontal", extend="neither")
     cbax.set_position([0.05, ax.get_position().y0-.1-cbax.get_position().height, cbax.get_position().width, cbax.get_position().height])
-    if flashContours is not "":
+    cbax.set_xlabel(cbStr)
+    if flashContours != "":
         cbax2 = fig.add_axes([0, 0, (ax.get_position().width/3), .025])
-        fig.colorbar(flashContours, cax=cbax2, orientation="horizontal", label="Flash Extent Density", extend="max").set_ticks(np.arange(1, 14.01, 1))
+        fig.colorbar(flashContours, cax=cbax2, orientation="horizontal", label="Flash Extent Density", extend="max").set_ticks([1]+list(np.arange(1, 14, 1)), extend="neither")
         cbax2.set_position([0.05, ax.get_position().y0-.1-cbax.get_position().height-.01-cbax2.get_position().height, cbax2.get_position().width, cbax2.get_position().height])
     tax = fig.add_axes([0,0,(ax.get_position().width/3),.05])
     tax.text(0.5, 0.5, infoString, horizontalalignment="center", verticalalignment="center", fontsize=16)
@@ -229,5 +238,5 @@ def plot_radar(radarFileName, saveFileName=None, isPreviewRes=False, plotRadius=
 if __name__ == "__main__":
     from itertools import repeat
     radarDataDir = path.join(basePath, "radarData")
-    with mp.Pool(processes=8) as pool:
-        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(True), repeat("reflectivity")))
+    with mp.Pool(processes=11) as pool:
+        pool.starmap(plot_radar, zip(sorted(listdir(radarDataDir)), repeat(None), repeat(False), repeat(200), repeat(50), repeat(None), repeat(False), repeat(True), repeat("differential_reflectivity")))
