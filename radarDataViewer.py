@@ -90,9 +90,9 @@ class radarDataViewerFrame(wx.Frame):
         self.requestedRRStep = 10
         rrSlider.Bind(EVT_SLIDER, self.onrrSliderScroll)
         controlsPanelSizer.Add(rrSlider, 10, wx.EXPAND | wx.ALL, 20)
-        azText = wx.StaticText(controlsPanel, label="Azimuth for RHI:", style=wx.ALIGN_CENTER_HORIZONTAL)
+        azText = wx.StaticText(controlsPanel, label="Lat for cross-section:", style=wx.ALIGN_CENTER_HORIZONTAL)
         controlsPanelSizer.Add(azText, 1, wx.EXPAND | wx.ALL, 20)
-        azSlider = wx.Slider(controlsPanel, value=0, minValue=0, maxValue=360, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(100, 100))
+        azSlider = wx.Slider(controlsPanel, value=3025, minValue=3025, maxValue=3225, style= wx.SL_HORIZONTAL | wx.SL_LABELS, size=(100, 100))
         azSlider.Bind(EVT_SLIDER, self.onAzSliderScroll)
         controlsPanelSizer.Add(azSlider, 10, wx.EXPAND | wx.ALL, 20)
         redrawBtn = wx.Button(controlsPanel, label="Redraw", size=(100, 25))
@@ -130,14 +130,14 @@ class radarDataViewerFrame(wx.Frame):
         self.drawRHI()
     def onExportBtnPress(self, event):
         planPositionIndicator.plot_radar(self.requestedFile, False, 30, None, str("exports/ppi_"+self.requestedFile+".png"))
-        rangeHeightIndicator.plot_crosssection(self.requestedFile, self.requestedAz, False, str("exports/rhi_"+self.requestedFile+".png"))
+        rangeHeightIndicator.plot_crosssection(self.requestedFile, str("exports/rhi_"+self.requestedFile+".png"), self.requestedAz/100, False, 200, 10, self.shouldPlotLightning)
     def drawPPI(self):
         if self.requestedFile is not None:
             self.ppiPlotPanel.updatePlot(planPositionIndicator.plot_radar(self.requestedFile, None, True, self.requestedRad, self.requestedRRStep, self.requestedAz, self.shouldPlotReports, self.shouldPlotLightning))
     def drawRHI(self):
         if self.requestedFile is not None:
             if self.requestedAz is not None:
-                self.rhiPlotPanel.updatePlot(rangeHeightIndicator.plot_crosssection(self.requestedFile, None, self.requestedAz, True, self.requestedRad, self.requestedRRStep))
+                rangeHeightIndicator.plot_crosssection(self.requestedFile, str("exports/rhi_"+self.requestedFile+".png"), self.requestedAz/100, True, 200, 10, self.shouldPlotLightning)
 
 if __name__ == "__main__":
     app = wx.App()
